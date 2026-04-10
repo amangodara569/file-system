@@ -31,18 +31,37 @@ export const Dashboard = () => {
   const handleFileUpload = async (e) => {
     try {
       setUploading(true);
+      setError(''); // Clear previous errors
       const file = e.target.files[0];
       if (!file) return;
+
+      // Validate file size (500MB limit)
+      const maxSize = 500 * 1024 * 1024;
+      if (file.size > maxSize) {
+        setError('File size exceeds 500MB limit');
+        setUploading(false);
+        return;
+      }
+
+      console.log('Uploading file:', {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
 
       const formData = new FormData();
       formData.append('file', file);
       formData.append('description', file.name);
 
-      await filesAPI.upload(formData);
+      const response = await filesAPI.upload(formData);
+      console.log('Upload successful:', response.data);
+      
       await fetchFiles();
       e.target.value = '';
     } catch (err) {
-      setError(err.response?.data?.message || 'Upload failed');
+      console.error('Upload error:', err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Upload failed';
+      setError(errorMsg);
     } finally {
       setUploading(false);
     }

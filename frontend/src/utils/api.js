@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000
+  timeout: 0 // No timeout for file uploads
 });
 
 // Add token to requests
@@ -44,9 +44,21 @@ export const authAPI = {
 
 // Files API
 export const filesAPI = {
-  upload: (formData) => api.post('/files/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  upload: (formData) => {
+    const uploadConfig = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 0 // No timeout for uploads
+    });
+    
+    const token = localStorage.getItem('token');
+    if (token) {
+      uploadConfig.defaults.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    return uploadConfig.post('/files/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
   getFiles: () => api.get('/files'),
   getFileDetails: (fileId) => api.get(`/files/${fileId}`),
   downloadFile: (fileId) => api.get(`/files/${fileId}/download`, { responseType: 'blob' }),

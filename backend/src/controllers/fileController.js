@@ -16,12 +16,36 @@ exports.uploadFile = async (req, res) => {
     const encryptionKey = process.env.ENCRYPTION_KEY;
     const encryptionIV = process.env.ENCRYPTION_IV;
 
+    // Validate encryption keys exist
+    if (!encryptionKey || !encryptionIV) {
+      logger.error('Encryption keys not configured', { userId: req.user.userId });
+      return res.status(500).json({ message: 'Server encryption not configured' });
+    }
+
     // Create encrypted filename
     const encryptedFilename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.enc`;
     const encryptedPath = path.join(__dirname, '../../uploads', encryptedFilename);
 
+    // Ensure uploads directory exists
+    const uploadsDir = path.dirname(encryptedPath);
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    logger.info('Starting file encryption', { 
+      userId: req.user.userId, 
+      filename: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype
+    });
+
     // Encrypt the file
     await encryptFile(req.file.path, encryptedPath, encryptionKey, encryptionIV);
+
+    logger.info('File encrypted successfully', { 
+      userId: req.user.userId, 
+      filename: req.file.originalname
+    });
 
     // Create file record
     const fileDoc = new File({
@@ -37,31 +61,54 @@ exports.uploadFile = async (req, res) => {
 
     await fileDoc.save();
 
+    logger.info('File record saved to database', { 
+      userId: req.user.userId, 
+      fileId: fileDoc._id,
+      filename: req.file.originalname
+    });
+
     // Clean up temporary file
-    fs.unlinkSync(req.file.path);
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
 
     // Create log entry
     await Log.create({
       userId: req.user.userId,
       action: 'UPLOAD_FILE',
       fileId: fileDoc._id,
-      details: `Uploaded ${req.file.originalname}`,
+      details: `Uploaded ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)}KB)`,
       status: 'success',
       ipAddress: req.ip
     });
 
-    logger.info('File uploaded', { userId: req.user.userId, fileId: fileDoc._id, filename: req.file.originalname });
+    logger.info('File uploaded successfully', { userId: req.user.userId, fileId: fileDoc._id, filename: req.file.originalname });
 
     res.status(201).json({
       message: 'File uploaded successfully',
       file: fileDoc
     });
   } catch (error) {
-    logger.error('File upload error', { error: error.message });
+    logger.error('File upload error', { 
+      error: error.message, 
+      userId: req.user.userId,
+      filename: req.file?.originalname,
+      stack: error.stack
+    });
+
+    // Clean up temporary file
     if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (err) {
+        logger.error('Failed to clean up temp file', { error: err.message });
+      }
     }
-    res.status(500).json({ message: 'File upload failed' });
+
+    res.status(500).json({ 
+      message: 'File upload failed',
+      error: error.message 
+    });
   }
 };
 

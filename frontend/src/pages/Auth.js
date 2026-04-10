@@ -39,7 +39,7 @@ export const Login = () => {
             <label>Email</label>
             <input
               type="email"
-              value={email}
+            value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="Enter your email"
